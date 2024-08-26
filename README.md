@@ -121,13 +121,13 @@ Onde as colunas podem ser descritas da seguinte forma:
 ### Download
 O conjunto de dados está disponível diretamente na [fonte do Kaggle](#KaggleDataset). Posteriormente, este conjunto de dados deve ser carregado no método de fonte AWS preferido, melhor descrito mais adiante nesta documentação.
 
-> [!AVISO]  
+> [!WARNING]  
 > O conjunto de dados foi inserido manualmente em uma tabela equivalente no banco de dados AWS RDS MySQL.
 > Como esta configuração está fora do escopo do case, os detalhes não serão incluídos.
 >
 > Para testes, o método de fonte mais acessível para o projeto é carregar os dados no AWS S3 e defini-lo como a fonte de dados.
 
-> [!NOTA]  
+> [!NOTE]  
 > Foi realizada uma correção mínima neste conjunto de dados, pois um único valor da coluna `Time` estava preenchido com notação científica e causava comportamentos inesperados em alguns casos.
 > O valor foi substituído pela notação não científica.
 
