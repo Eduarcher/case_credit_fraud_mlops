@@ -8,7 +8,7 @@ ECS:
   ECSTaskDefinitionName: CaseCreditFraud
 
 Preprocess:
-  SourceMethod: s3
+  SourceMethod: rds
   PreprocessFramework: pyspark
   PreprocessSklearnInstanceType: ml.t3.medium
   PreprocessPysparkInstanceType: ml.t3.large
