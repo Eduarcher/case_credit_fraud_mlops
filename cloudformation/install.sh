@@ -30,9 +30,9 @@ mkdir -p .cftmp
 ###########################################
 ############ STORAGE RESOURCES ############
 ###########################################
-aws cloudformation create-stack --stack-name storage \
-    --template-body file://cloudformation/templates/storage.yaml
-aws cloudformation wait stack-create-complete --stack-name storage
+# aws cloudformation create-stack --stack-name storage \
+#     --template-body file://cloudformation/templates/storage.yaml
+# aws cloudformation wait stack-create-complete --stack-name storage
 
 ###########################################
 ########### ECS TASK DEFINITION ###########
