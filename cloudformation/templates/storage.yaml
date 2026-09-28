@@ -1,0 +1,84 @@
+Resources:
+  CodePipelineS3Bucket:
+    Type: "AWS::S3::Bucket"
+    DeletionPolicy: "Retain"
+    UpdateReplacePolicy: "Retain"
+    Properties:
+      PublicAccessBlockConfiguration:
+        RestrictPublicBuckets: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        BlockPublicAcls: true
+      BucketName: !Sub "codepipeline-credit-fraud-${AWS::AccountId}"
+      OwnershipControls:
+        Rules:
+        - ObjectOwnership: "BucketOwnerEnforced"
+  CodePipelineS3BucketPolicy:
+    DependsOn:
+      - CodePipelineS3Bucket
+    Type: "AWS::S3::BucketPolicy"
+    DeletionPolicy: "Retain"
+    UpdateReplacePolicy: "Retain"
+    Properties:
+      Bucket:
+        Ref: "CodePipelineS3Bucket"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Condition:
+            StringNotEquals:
+              s3:x-amz-server-side-encryption: "aws:kms"
+          Resource: !Sub "${CodePipelineS3Bucket.Arn}/*"
+          Action: "s3:PutObject"
+          Effect: "Deny"
+          Principal: 
+            AWS:
+              - "*"
+          Sid: "DenyUnEncryptedObjectUploads"
+        - Condition:
+            Bool:
+              aws:SecureTransport: "false"
+          Resource: !Sub "${CodePipelineS3Bucket.Arn}/*"
+          Action: "s3:*"
+          Effect: "Deny"
+          Principal: 
+            AWS:
+              - "*"
+          Sid: "DenyInsecureConnections"
+        Id: "SSEAndSSLPolicy"
+  ECRRepository:
+    UpdateReplacePolicy: "Retain"
+    Type: "AWS::ECR::Repository"
+    DeletionPolicy: "Retain"
+    Properties:
+      ImageScanningConfiguration:
+        ScanOnPush: false
+      RepositoryName: !Sub "credit-fraud-${AWS::AccountId}"
+      EncryptionConfiguration:
+        EncryptionType: "AES256"
+      RepositoryPolicyText:
+        Version: "2008-10-17"
+        Statement:
+        - Action:
+          - "ecr:BatchGetImage"
+          - "ecr:GetDownloadUrlForLayer"
+          - "ecr:SetRepositoryPolicy"
+          - "ecr:DeleteRepositoryPolicy"
+          - "ecr:GetRepositoryPolicy"
+          Effect: "Allow"
+          Principal:
+            Service: "lambda.amazonaws.com"
+          Sid: "LambdaECRImageRetrievalPolicy"
+      Tags: []
+      ImageTagMutability: "MUTABLE"
+Outputs:
+  CodePipelineS3Bucket:
+    Description: "CodePipeline S3 Bucket Name"
+    Value: !Ref CodePipelineS3Bucket
+    Export:
+      Name: Storage-CodePipelineS3Bucket
+  ECRRepository:
+    Description: "ECR Repository Name"
+    Value: !Ref ECRRepository
+    Export:
+      Name: Storage-ECRRepository

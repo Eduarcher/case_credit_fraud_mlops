@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This template creates the ECS task definition responsible for running the container \
+ for the Sagemaker Pipeline construction
+Parameters:
+  ECSTaskDefinitionName:
+    Type: String
+    Default: CaseCreditFraud
+    Description: Enter a name for the ECS Task Definition.
+  ContainerEnvironmentFileS3ARN:
+    Type: String
+    Description: Enter the S3 path to the environment file for the container.
+  InitialImageTag:
+    Type: String
+    Default: "1.0.0"
+    Description: Initial tag value for the ECS Task Definition container image. \
+      Replaced automatically by CodePipeline continuous integration.
+Resources:
+  SageMakerExecutionRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/service-role/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+      - "arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess"
+      MaxSessionDuration: 3600
+      RoleName: "SageMakerExecutionRole"
+      Description: "SageMaker execution role created for running pipelines with MLFlow"
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "arn:aws:s3:::*"
+            Action:
+            - "s3:GetObject"
+            - "s3:PutObject"
+            - "s3:DeleteObject"
+            - "s3:ListBucket"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "S3BucketAccess"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "sagemaker-mlflow:*"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "MLFlowAccess"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "iam:CreateServiceLinkedRole"
+            - "iam:GetRole"
+            - "iam:GetRolePolicy"
+            - "iam:PassRole"
+            - "iam:ListRoles"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "IAMServiceLinkedRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "sagemaker.amazonaws.com"
+  ECSExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
+      - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+      - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+      - "arn:aws:iam::aws:policy/AmazonECS_FullAccess"
+      - "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+      MaxSessionDuration: 3600
+      RoleName: "ECSExecutionRole"
+      Description: "ECS IAM execution role for general task definitions."
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "codepipeline:PutJobSuccessResult"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "CodePipelineResultSuccess"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "sagemaker-mlflow:CreateRun"
+            - "sagemaker-mlflow:UpdateRun"
+            - "sagemaker-mlflow:GetRun"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "SagemakerMlflowManageRun"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "secretsmanager:GetSecretValue"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "SecretsManagerGetSecretValue"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "ecs-tasks.amazonaws.com"
+          Sid: ""
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "lambda.amazonaws.com"
+  ECSTaskDefinition:
+    DependsOn:
+      - ECSExecutionRole
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      TaskRoleArn: !GetAtt ECSExecutionRole.Arn
+      InferenceAccelerators: []
+      Memory: "512"
+      PlacementConstraints: []
+      Cpu: "256"
+      RequiresCompatibilities:
+      - "FARGATE"
+      NetworkMode: "awsvpc"
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      RuntimePlatform:
+        OperatingSystemFamily: "LINUX"
+        CpuArchitecture: "X86_64"
+      Volumes: []
+      ContainerDefinitions:
+      - ExtraHosts: []
+        Secrets: []
+        VolumesFrom: []
+        Cpu: 0
+        EntryPoint: []
+        DnsServers: []
+        Image: !Sub
+          - "${AWSAccountID}.dkr.ecr.${AWSRegion}.amazonaws.com/${Repository}:${Tag}"
+          - AWSAccountID: !Ref AWS::AccountId
+            AWSRegion: !Ref AWS::Region
+            Repository: !ImportValue Storage-ECRRepository
+            Tag: !Ref InitialImageTag
+        Essential: true
+        LogConfiguration:
+          SecretOptions: []
+          Options:
+            awslogs-create-group: true
+            awslogs-group: "/aws/batch/job"
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: "CaseCreditFraud"
+          LogDriver: "awslogs"
+        ResourceRequirements: []
+        EnvironmentFiles:
+          - Value: !Ref ContainerEnvironmentFileS3ARN
+            Type: s3
+        Name: "default"
+        MountPoints: []
+        DependsOn: []
+        DockerLabels: {}
+        PortMappings: []
+        DockerSecurityOptions: []
+        SystemControls: []
+        Command: []
+        DnsSearchDomains: []
+        Environment: []
+        Links: []
+        CredentialSpecs: []
+        Ulimits: []
+      Family: "CaseCreditFraud"
+      Tags: []
+  ECSCluster:
+    DependsOn:
+      - ECSExecutionRole
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::ECS::Cluster"
+    DeletionPolicy: "Delete"
+    Properties:
+      CapacityProviders:
+      - "FARGATE"
+      ClusterName: "AWSFargateComputeEnv"
+      ClusterSettings:
+      - Value: "disabled"
+        Name: "containerInsights"
+      DefaultCapacityProviderStrategy:
+      - Weight: 1
+        Base: 0
+        CapacityProvider: "FARGATE"
+Outputs:
+  ECSExecutionRoleARN:
+    Description: "The ARN of the ECS Execution Role Created by the ECS Stack"
+    Value: !GetAtt ECSExecutionRole.Arn 
+    Export:
+      Name: ecs-task-definition-ECSExecutionRoleARN
+  ECSClusterArn:
+    Description: "The ARN of the ECS Cluster"
+    Value: !GetAtt ECSCluster.Arn 
+    Export:
+      Name: ecs-task-definition-ECSClusterARN

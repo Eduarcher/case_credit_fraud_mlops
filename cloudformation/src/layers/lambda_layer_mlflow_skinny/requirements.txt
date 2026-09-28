@@ -1,0 +1,2 @@
+mlflow-skinny==2.14.2
+sagemaker-mlflow==0.1.0

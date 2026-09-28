@@ -1,0 +1,139 @@
+Parameters:
+  LambdaRouteHealthModelFunctionName:
+    Type: String
+    Default: lambda_route_health_model
+    Description: Name of the Lambda function that routes health checks to the model endpoint
+Resources:
+  APIGatewayInvokeLambdaRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+      MaxSessionDuration: 3600
+      RoleName: "APIGatewayInvokeLambdaRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service:
+            - "lambda.amazonaws.com"
+            - "apigateway.amazonaws.com"
+  ApiGatewayRestApi:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::ApiGateway::RestApi"
+    DeletionPolicy: "Delete"
+    Properties:
+      ApiKeySourceType: "HEADER"
+      EndpointConfiguration:
+        Types:
+        - "REGIONAL"
+      DisableExecuteApiEndpoint: false
+      Name: "CaseCreditFraudAPI"
+  ApiGatewayHealthMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: GET
+      Integration: 
+        IntegrationHttpMethod: POST
+        Credentials: !GetAtt APIGatewayInvokeLambdaRole.Arn
+        Type: AWS
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !ImportValue Lambda-RouteHealthModelArn
+        IntegrationResponses:
+          - StatusCode: 200
+          - StatusCode: 503
+      MethodResponses:
+        - StatusCode: 200
+        - StatusCode: 503
+      ResourceId: !GetAtt ApiGatewayRestApi.RootResourceId
+      RestApiId: !Ref ApiGatewayRestApi
+  ApiGatewayInferenceMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: true
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration: 
+        IntegrationHttpMethod: POST
+        Credentials: !GetAtt APIGatewayInvokeLambdaRole.Arn
+        Type: AWS_PROXY
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+          - lambdaArn: !ImportValue Lambda-RouteInferenceModelArn
+        IntegrationResponses:
+          - StatusCode: 200
+          - StatusCode: 503
+      MethodResponses:
+        - StatusCode: 200
+        - StatusCode: 503
+      ResourceId: !GetAtt ApiGatewayRestApi.RootResourceId
+      RestApiId: !Ref ApiGatewayRestApi
+  ApiGatewayDeployment:
+    DependsOn:
+      - ApiGatewayHealthMethod
+      - ApiGatewayInferenceMethod
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::ApiGateway::Deployment"
+    DeletionPolicy: "Delete"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+  ApiGatewayStage:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::ApiGateway::Stage"
+    DeletionPolicy: "Delete"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      DeploymentId: !GetAtt ApiGatewayDeployment.DeploymentId
+      StageName: "dev"
+      CacheClusterSize: "0.5"
+      TracingEnabled: false
+      CacheClusterEnabled: false
+  ApiGatewayInvokeHealthPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LambdaRouteHealthModelFunctionName
+      Principal: apigateway.amazonaws.com
+      # note: if route *not* at API Gateway root, `SourceArn` would take the form of:
+      #               arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apiGateway}/${apiGatewayStageName}/${apiGatewayHTTPMethod}/PATH_PART
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/${ApiGatewayStage}/GET/
+  ApiGatewayUsagePlan:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::ApiGateway::UsagePlan"
+    DeletionPolicy: "Delete"
+    Properties:
+      ApiStages:
+      - Stage: !Ref ApiGatewayStage
+        ApiId: !Ref ApiGatewayRestApi
+      Quota:
+        Period: "DAY"
+        Limit: 300
+        Offset: 0
+      Throttle:
+        BurstLimit: 3
+        RateLimit: 3
+      UsagePlanName: "GeneralUserPlan"
+  ApiGatewayApiKey:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::ApiGateway::ApiKey"
+    DeletionPolicy: "Delete"
+    Properties:
+      Enabled: true
+      Name: "GeneralUserKey"
+  ApiGatewayUsagePlanKey:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::ApiGateway::UsagePlanKey"
+    DeletionPolicy: "Delete"
+    Properties:
+      KeyType: "API_KEY"
+      UsagePlanId: !Ref ApiGatewayUsagePlan
+      KeyId: !Ref ApiGatewayApiKey

@@ -1,0 +1,69 @@
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.DS_Store
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Data folders
+data
+model_test
+*.tar.gz
+
+# Build-time downloaded dependencies (e.g. MySQL JDBC driver, see buildspec.yml)
+dependencies/
+
+# VSCode
+.vscode
+
+# Pytest
+.coverage
+coverage.xml
+unittests.xml
+.pytest_cache
+
+# MLFlow
+mlruns
+
+# Cloudformation
+.cftmp
+
+# Ruff
+.ruff_cache
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+**__pycache__**

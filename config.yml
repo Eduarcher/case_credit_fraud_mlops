@@ -1,0 +1,42 @@
+Global:
+  PipelineName: CaseCreditFraudPipelineV1
+  BaseJobNamePrefix: case-credit-fraud-v1
+  JobsScriptsFolder: credit_fraud/pipeline/jobs
+
+ECS:
+  RunPipelineLambdaFunctionName: sagemaker-case-credit-fraud-v1-run-pipeline
+  ECSTaskDefinitionName: CaseCreditFraud
+
+Preprocess:
+  SourceMethod: s3
+  PreprocessFramework: pyspark
+  PreprocessSklearnInstanceType: ml.t3.medium
+  PreprocessPysparkInstanceType: ml.t3.large
+  PreprocessPysparkInstanceCount: 3
+  TrainRatio: 0.7
+  ValidationRatio: 0.1
+  TestRatio: 0.2
+
+Training:
+  DefaultTrainingAlgorithm: lgbm
+  XGBoostFrameworkVersion: 1.7-1
+  TrainInstanceType: ml.m4.xlarge
+  TrainInstanceCount: 1
+
+Evaluation:
+  EvaluateInstanceType: ml.t3.medium
+  ROCAUCMinThreshold: 0.85
+
+Registry:
+  RegisterModelLambdaFunctionName: sagemaker-case-credit-fraud-v1-register-model
+
+Deployment:
+  EndpointName: CaseCreditFraudPipeline-endpoint
+  DeployInstanceType: ml.m4.xlarge
+  DeployModelMinCapacity: 2
+  DeployModelMaxCapacity: 3
+  DeployLambdaFunctionName: sagemaker-case-credit-fraud-v1-deploy
+
+APIGateway:
+  InferenceEndpointLambdaFunctionName: sagemaker-case-credit-fraud-v1-endpoint-inference
+  InferenceHealthLambdaFunctionName: sagemaker-case-credit-fraud-v1-endpoint-inference-health

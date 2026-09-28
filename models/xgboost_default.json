@@ -1,0 +1,9 @@
+{
+    "objective": "binary:logistic",
+    "num_round": "100",
+    "max_depth": "3",
+    "subsample": "0.9",
+    "colsample_bytree": "0.8",
+    "eta": "0.2",
+    "nfold": "3"
+}

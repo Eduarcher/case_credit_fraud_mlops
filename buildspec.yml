@@ -1,0 +1,27 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - export IMAGE_VERSION=$(cat ./pyproject.toml | grep version | grep -oP '(?<=version = ").*?(?=")')
+      - export IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_VERSION
+      - echo $IMAGE_URI
+      - echo Fetching MySQL JDBC driver required by the PySpark RDS source...
+      - mkdir -p dependencies
+      - curl -fsSL -o dependencies/mysql-connector-j-9.0.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...          
+      - docker build -t $IMAGE_REPO_NAME:$IMAGE_VERSION .
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_VERSION $IMAGE_URI      
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker image...
+      - docker push $IMAGE_URI
+env:
+  exported-variables:
+    - IMAGE_URI

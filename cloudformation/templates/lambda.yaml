@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This template creates Lambda functions that supports the Sagemaker Pipeline
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: Enter a valid accessible S3 bucket name for installation
+  LambdaRunPipelineFunctionName:
+    Type: String
+    Default: lambda_run_pipeline
+    Description: Name of the Lambda function that runs the pipeline
+  RunPipelineECSTaskDefinitionName:
+    Type: String
+    Default: CaseCreditFraud
+    Description: Name of the ECS Task Definition used to run the pipeline
+  RunPipelineVPCID:
+    Type: String
+    Description: ID of the VPC for the 'run-pipeline' lambda task
+  LambdaRegisterModelFunctionName:
+    Type: String
+    Default: lambda_register_model
+    Description: Name of the Lambda function that register the trained model into MLFlow
+  LambdaDeployModelFunctionName:
+    Type: String
+    Default: lambda_deploy_model
+    Description: Name of the Lambda function that deploys the model to an endpoint
+  DeployModelMinCapacity:
+    Type: Number
+    Default: 2
+    Description: Minimum number of instances for the model endpoint
+  DeployModelMaxCapacity:
+    Type: Number
+    Default: 3
+    Description: Maximum number of instances for the model endpoint
+  EndpointName:
+    Type: String
+    Default: CaseCreditFraudPipeline-endpoint
+    Description: Model endpoint name for inference
+  LambdaRouteHealthModelFunctionName:
+    Type: String
+    Default: lambda_route_health_model
+    Description: Name of the Lambda function that routes health checks to the model endpoint
+  LambdaRouteInferenceModelFunctionName:
+    Type: String
+    Default: lambda_route_inference_model
+    Description: Name of the Lambda function that routes inference requests to the model endpoint
+Resources:
+  MLFlowLambdaRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      - "arn:aws:iam::aws:policy/AWSLambdaExecute"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+      MaxSessionDuration: 3600
+      RoleName: "MLFlowLambdaRole"
+      Description: ""
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "sagemaker-mlflow:*"
+            Effect: "Allow"
+            Sid: "mlflow"
+        PolicyName: "MlflowFullAccess"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "lambda.amazonaws.com"
+  SagemakerLambdaInvokeRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+      MaxSessionDuration: 3600
+      RoleName: "SagemakerLambdaInvokeRole"
+      Description: "Allows Lambda functions to call AWS services on your behalf."
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "iam:CreateServiceLinkedRole"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "IAMCreateServiceLinkedRole"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "application-autoscaling:RegisterScalableTarget"
+            - "application-autoscaling:PutScalingPolicy"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "AutoScalingRegister"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "cloudwatch:PutMetricAlarm"
+            - "cloudwatch:DeleteAlarms"
+            - "cloudwatch:DescribeAlarms"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "CloudwatchAlarmConfig"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "sagemaker:CreateEndpointConfig"
+            - "sagemaker:CreateEndpoint"
+            - "sagemaker:UpdateEndpoint"
+            - "sagemaker:UpdateEndpointWeightsAndCapacities"
+            - "sagemaker:DeleteEndpoint"
+            - "sagemaker:DeleteEndpointConfig"
+            - "sagemaker:DescribeEndpoint"
+            - "sagemaker:ListEndpoints"
+            - "sagemaker:ListEndpointConfigs"
+            - "sagemaker:DescribeEndpointConfig"
+            Effect: "Allow"
+            Sid: "Statement1"
+        PolicyName: "CreateSagemakerEndpointConfig"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "lambda.amazonaws.com"
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "sagemaker.amazonaws.com"
+  LambdaLayerMlflowSkinny:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes: 
+        - python3.11
+      Content: 
+        S3Bucket: !Ref S3BucketName
+        S3Key: case-credit-fraud/lambda_layers/lambda_layer_mlflow_skinny.zip
+      Description: Lambda Layer for mLflow-skinny
+      LayerName: mlflowskinny
+  LambdaRunPipeline:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaRunPipelineFunctionName
+      Runtime: python3.8
+      Handler: lambda_run_pipeline.lambda_handler
+      Environment:
+        Variables:
+          ECS_TASK_DEFINITION_NAME: !Ref RunPipelineECSTaskDefinitionName
+          VPC_ID: !Ref RunPipelineVPCID
+          ECS_FARGATE_CLUSTER_ARN: !ImportValue ecs-task-definition-ECSClusterARN
+      Role: !ImportValue ecs-task-definition-ECSExecutionRoleARN
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: case-credit-fraud/lambda_functions/lambda_run_pipeline.zip
+      Timeout: 60
+  LambdaRegisterModel:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaRegisterModelFunctionName
+      Runtime: python3.11
+      Handler: lambda_register_model.lambda_handler
+      MemorySize: 256
+      Layers:
+        - !GetAtt LambdaLayerMlflowSkinny.LayerVersionArn
+      Role: !GetAtt MLFlowLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: case-credit-fraud/lambda_functions/lambda_register_model.zip
+      Timeout: 60
+  LambdaDeployModel:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaDeployModelFunctionName
+      Runtime: python3.8
+      Handler: lambda_deploy_model.lambda_handler
+      Environment:
+        Variables:
+          MODEL_MIN_CAPACITY: !Ref DeployModelMinCapacity
+          MODEL_MAX_CAPACITY: !Ref DeployModelMaxCapacity
+      Role: !GetAtt SagemakerLambdaInvokeRole.Arn
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: case-credit-fraud/lambda_functions/lambda_deploy_model.zip
+      Timeout: 900
+  LambdaRouteHealthModel:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaRouteHealthModelFunctionName
+      Runtime: python3.8
+      Handler: lambda_health.lambda_handler
+      Environment:
+        Variables:
+          ENDPOINT_NAME: !Ref EndpointName
+      Role: !ImportValue ecs-task-definition-ECSExecutionRoleARN
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: case-credit-fraud/lambda_functions/lambda_route_health_model.zip
+      Timeout: 10
+  LambdaRouteInferenceModel:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaRouteInferenceModelFunctionName
+      Runtime: python3.8
+      Handler: lambda_inference.lambda_handler
+      Environment:
+        Variables:
+          ENDPOINT_NAME: !Ref EndpointName
+      Role: !ImportValue ecs-task-definition-ECSExecutionRoleARN
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: case-credit-fraud/lambda_functions/lambda_route_inference_model.zip
+      Timeout: 120
+Outputs:
+  LambdaRouteHealthModelArn:
+    Description: "ARN of the Lambda function that routes health checks to the model endpoint"
+    Value: !GetAtt LambdaRouteHealthModel.Arn
+    Export:
+      Name: Lambda-RouteHealthModelArn
+  LambdaRouteInferenceModelArn:
+    Description: "ARN of the Lambda function that calls for inference to the model endpoint"
+    Value: !GetAtt LambdaRouteInferenceModel.Arn
+    Export:
+      Name: Lambda-RouteInferenceModelArn

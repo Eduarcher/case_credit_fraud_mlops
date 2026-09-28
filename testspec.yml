@@ -1,0 +1,22 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - pip install pytest
+      - pip install pytest-cov
+      - pip install .
+
+  build:
+    commands:
+      - python -m pytest
+
+reports:
+  unit_tests:
+    files:
+      - unittests.xml
+    file-format: JUNITXML
+  coverage_tests:
+    files:
+      - coverage.xml
+    file-format: COBERTURAXML

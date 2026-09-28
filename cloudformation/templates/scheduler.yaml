@@ -1,0 +1,84 @@
+Description: This template creates the AWS Eventbridge Scheduler for regular retraining of the ML model
+Parameters:
+  RunPipelineECSSubnetList:
+    Type: CommaDelimitedList
+    Description: Subnet IDs of the ECS Task VPC (Min. 1).
+  ECSTaskDefinitionName:
+    Type: String
+    Default: CaseCreditFraud
+    Description: Enter a name for the ECS Task Definition.
+  SchedulerCronExpression:
+    Type: String
+    Default: "0 0 * * ? *"
+    Description: Enter a cron expression for the scheduler
+Resources:
+  SchedulerRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/service-role/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+      MaxSessionDuration: 3600
+      RoleName: "EventBridge_SchedulerRole"
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "ecs:RunTask"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "s3:*"
+            - "s3-object-lambda:*"
+            Effect: "Allow"
+          - Condition:
+              StringLike:
+                iam:PassedToService: "ecs-tasks.amazonaws.com"
+            Resource:
+            - "*"
+            Action: "iam:PassRole"
+            Effect: "Allow"
+        PolicyName: "SchedulerPolicy"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "scheduler.amazonaws.com"
+  Scheduler:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::Scheduler::Schedule"
+    DeletionPolicy: "Delete"
+    Properties:
+      GroupName: "default"
+      ScheduleExpression: !Sub "cron(${SchedulerCronExpression})"
+      Target:
+        Arn: !ImportValue ecs-task-definition-ECSClusterARN
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 1
+        EcsParameters:
+          NetworkConfiguration:
+            AwsvpcConfiguration:
+              Subnets: !Ref RunPipelineECSSubnetList
+              AssignPublicIp: "ENABLED"
+          EnableECSManagedTags: true
+          CapacityProviderStrategy:
+          - Weight: 1
+            Base: 0
+            CapacityProvider: "FARGATE"
+          TaskCount: 1
+          EnableExecuteCommand: false
+          TaskDefinitionArn: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/${ECSTaskDefinitionName}"
+        RoleArn: !GetAtt SchedulerRole.Arn
+      Description: "Regular scheduled update on Credit Fraud ML pipeline"
+      State: "ENABLED"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpressionTimezone: "America/Sao_Paulo"
+      Name: "CaseCreditFraud_RegularUpdate"

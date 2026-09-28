@@ -1,0 +1,256 @@
+Description: This template creates a CodePipeline that builds the Docker image and runs the Sagemaker Pipeline
+Parameters:
+  GitHubConnectionArn:
+    Type: String
+    Description: ARN of the Codestar GitHubConnection. See README for instructions on how to create.
+  GitHubRepositoryName:
+    Type: String
+    Description: Enter the repository name with format "OWNER/REPO_NAME"
+  MainBranchName:
+    Type: String
+    Default: main
+    Description: Name of the main branch to be tracked 
+  RunPipelineLambdaFunctionName:
+    Type: String
+    Default: sagemaker-case-credit-fraud-v1-run-pipeline
+    Description: Name of the Lambda function that runs the pipeline
+Resources:
+  CodeBuildServiceRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/service-role/"
+      MaxSessionDuration: 3600
+      RoleName: "CodeBuildServiceRole"
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - "*"
+            Action:
+            - "logs:CreateLogGroup"
+            - "logs:CreateLogStream"
+            - "logs:PutLogEvents"
+            Effect: "Allow"
+          - Resource:
+            - "*"
+            Action:
+            - "s3:PutObject"
+            - "s3:GetObject"
+            - "s3:GetObjectVersion"
+            - "s3:GetBucketAcl"
+            - "s3:GetBucketLocation"
+            Effect: "Allow"
+          - Resource:
+            - "*"
+            Action:
+            - "codebuild:CreateReportGroup"
+            - "codebuild:CreateReport"
+            - "codebuild:UpdateReport"
+            - "codebuild:BatchPutTestCases"
+            - "codebuild:BatchPutCodeCoverages"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "ecr:GetAuthorizationToken"
+            - "ecr:InitiateLayerUpload"
+            - "ecr:UploadLayerPart"
+            - "ecr:CompleteLayerUpload"
+            - "ecr:BatchGetImage"
+            - "ecr:BatchCheckLayerAvailability"
+            - "ecr:DescribeImages"
+            - "ecr:DescribeRepositories"
+            - "ecr:GetDownloadUrlForLayer"
+            - "ecr:ListImages"
+            - "ecr:PutImage"
+            Effect: "Allow"
+        PolicyName: "CodeBuildPolicy"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "codebuild.amazonaws.com"
+  CodePipelineServiceRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/service-role/"
+      MaxSessionDuration: 3600
+      RoleName: "CodePipelineServiceRole"
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Condition:
+              StringEqualsIfExists:
+                iam:PassedToService:
+                - "ecs-tasks.amazonaws.com"
+            Resource: "*"
+            Action:
+            - "iam:PassRole"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "codestar-connections:UseConnection"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "lambda:InvokeFunction"
+            - "lambda:ListFunctions"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "codebuild:BatchGetBuilds"
+            - "codebuild:StartBuild"
+            - "codebuild:BatchGetBuildBatches"
+            - "codebuild:StartBuildBatch"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "ecr:DescribeImages"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "states:DescribeExecution"
+            - "states:DescribeStateMachine"
+            - "states:StartExecution"
+            Effect: "Allow"
+          - Resource: "*"
+            Action:
+            - "s3:GetObject"
+            - "s3:PutObject"
+            Effect: "Allow"
+        PolicyName: "CodePipelinePolicy"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "codepipeline.amazonaws.com"
+  UnitTestCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: CaseCreditFraudUnitTest
+      Source:
+        Type: GITHUB
+        GitCloneDepth: 1
+        BuildSpec: testspec.yml
+        Location: !Sub https://github.com/${GitHubRepositoryName}
+      Environment:
+        PrivilegedMode: False
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_SMALL
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: CaseCreditFraudUnitTest-CloudWatchLogs-BuildLogGroup
+  BuildImageCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: CaseCreditFraudBuildImage
+      Source:
+        Type: GITHUB
+        GitCloneDepth: 1
+        BuildSpec: buildspec.yml
+        Location: !Sub https://github.com/${GitHubRepositoryName}
+      Environment:
+        PrivilegedMode: False
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          - Name: IMAGE_REPO_NAME
+            Value: !ImportValue Storage-ECRRepository
+            Type: PLAINTEXT
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+            Type: PLAINTEXT
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+            Type: PLAINTEXT
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: CaseCreditFraudBuildImage-CloudWatchLogs-BuildLogGroup
+  CreditFraudCodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ExecutionMode: QUEUED
+      Name: CaseCreditFraudCodePipeline
+      PipelineType: V2
+      RestartExecutionOnUpdate: False
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceGithub
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceArtifact
+              Configuration:
+                FullRepositoryId: !Ref GitHubRepositoryName
+                BranchName: !Ref MainBranchName
+                ConnectionArn: !Ref GitHubConnectionArn
+                OutputArtifactFormat: CODE_ZIP
+                DetectChanges: true
+              RunOrder: 1
+        - Name: Testing
+          Actions:
+            - Name: UnitTest
+              InputArtifacts:
+                - Name: SourceArtifact
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref UnitTestCodeBuildProject
+        - Name: Build
+          Actions:
+            - Name: BuildImage
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref BuildImageCodeBuildProject
+              Namespace: BuildVariables
+        - Name: Run
+          Actions:
+            - Name: RunPipeline
+              InputArtifacts:
+                - Name: BuildArtifact
+              ActionTypeId:
+                Category: Invoke
+                Owner: AWS
+                Provider: Lambda
+                Version: "1"
+              Configuration:
+                FunctionName: !Ref RunPipelineLambdaFunctionName
+                UserParameters: "#{BuildVariables.IMAGE_URI}"
+      ArtifactStore: 
+        Location: !ImportValue Storage-CodePipelineS3Bucket
+        Type: S3
