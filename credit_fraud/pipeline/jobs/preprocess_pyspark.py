@@ -31,12 +31,18 @@ def move_column_to_first(df: DataFrame, col: str):
     return df.select(col, *df_columns)
 
 
+# The assembled/scaled feature vector holds the 28 PCA columns (V1..V28) in
+# ascending order, so the vector element for `V{i}` is the 0-based index `i - 1`.
+SCALED_FEATURE_VECTOR_INDEX = {f"V{i}": i - 1 for i in range(1, 29)}
+
+
 def transform_dataframe(df):
     # Apply Scaling to training dataset
     df_scaled = scalerModel.transform(df)
-    for i in range(1, 29):
+    for feature_name, vector_index in SCALED_FEATURE_VECTOR_INDEX.items():
         df_scaled = df_scaled.withColumn(
-            f"V{i}", vector_to_array("min_max_features_scaled").getItem(i)
+            feature_name,
+            vector_to_array("min_max_features_scaled").getItem(vector_index),
         )
     df_scaled = df_scaled.withColumn(
         "Amount", vector_to_array("Amount_scaled").getItem(0)

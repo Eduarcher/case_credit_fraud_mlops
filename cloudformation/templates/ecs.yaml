@@ -9,6 +9,9 @@ Parameters:
   ContainerEnvironmentFileS3ARN:
     Type: String
     Description: Enter the S3 path to the environment file for the container.
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket used for data, scripts, and artifacts.
   InitialImageTag:
     Type: String
     Default: "1.0.0"
@@ -22,24 +25,24 @@ Resources:
     Properties:
       Path: "/service-role/"
       ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
       - "arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess"
       MaxSessionDuration: 3600
       RoleName: "SageMakerExecutionRole"
-      Description: "SageMaker execution role created for running pipelines with MLFlow"
+      Description: "SageMaker execution role scoped to the documented pipeline workflow"
       Policies:
       - PolicyDocument:
           Version: "2012-10-17"
           Statement:
           - Resource:
-            - "arn:aws:s3:::*"
+            - !Sub "arn:aws:s3:::${S3BucketName}"
+            - !Sub "arn:aws:s3:::${S3BucketName}/*"
             Action:
             - "s3:GetObject"
             - "s3:PutObject"
             - "s3:DeleteObject"
             - "s3:ListBucket"
             Effect: "Allow"
-            Sid: "Statement1"
+            Sid: "S3BucketAccess"
         PolicyName: "S3BucketAccess"
       - PolicyDocument:
           Version: "2012-10-17"
@@ -49,7 +52,7 @@ Resources:
             Action:
             - "sagemaker-mlflow:*"
             Effect: "Allow"
-            Sid: "Statement1"
+            Sid: "MlflowAccess"
         PolicyName: "MLFlowAccess"
       - PolicyDocument:
           Version: "2012-10-17"
@@ -63,8 +66,47 @@ Resources:
             - "iam:PassRole"
             - "iam:ListRoles"
             Effect: "Allow"
-            Sid: "Statement1"
+            Sid: "IAMServiceLinkedRole"
         PolicyName: "IAMServiceLinkedRole"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "sagemaker:AddTags"
+            - "sagemaker:CreatePipeline"
+            - "sagemaker:UpdatePipeline"
+            - "sagemaker:DescribePipeline"
+            - "sagemaker:ListPipelines"
+            - "sagemaker:DeletePipeline"
+            - "sagemaker:StartPipelineExecution"
+            - "sagemaker:DescribePipelineExecution"
+            - "sagemaker:ListPipelineExecutions"
+            - "sagemaker:StopPipelineExecution"
+            - "sagemaker:CreateProcessingJob"
+            - "sagemaker:DescribeProcessingJob"
+            - "sagemaker:ListProcessingJobs"
+            - "sagemaker:StopProcessingJob"
+            - "sagemaker:CreateTrainingJob"
+            - "sagemaker:DescribeTrainingJob"
+            - "sagemaker:ListTrainingJobs"
+            - "sagemaker:StopTrainingJob"
+            - "sagemaker:CreateModel"
+            - "sagemaker:DescribeModel"
+            - "sagemaker:ListModels"
+            - "sagemaker:CreateEndpointConfig"
+            - "sagemaker:DescribeEndpointConfig"
+            - "sagemaker:CreateEndpoint"
+            - "sagemaker:UpdateEndpoint"
+            - "sagemaker:DescribeEndpoint"
+            - "sagemaker:ListEndpoints"
+            - "sagemaker:InvokeEndpoint"
+            - "sagemaker:ListTags"
+            - "sagemaker:DescribeModelPackage"
+            - "sagemaker:DescribeModelPackageGroup"
+            Effect: "Allow"
+            Sid: "SageMakerPipelineAccess"
+        PolicyName: "SageMakerPipelineAccess"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -77,15 +119,10 @@ Resources:
     Properties:
       Path: "/"
       ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
-      - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-      - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
-      - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
-      - "arn:aws:iam::aws:policy/AmazonECS_FullAccess"
-      - "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       MaxSessionDuration: 3600
       RoleName: "ECSExecutionRole"
-      Description: "ECS IAM execution role for general task definitions."
+      Description: "Execution and task role for the pipeline container and the supporting Lambda functions"
       Policies:
       - PolicyDocument:
           Version: "2012-10-17"
@@ -94,7 +131,7 @@ Resources:
             Action:
             - "codepipeline:PutJobSuccessResult"
             Effect: "Allow"
-            Sid: "Statement1"
+            Sid: "CodePipelineResultSuccess"
         PolicyName: "CodePipelineResultSuccess"
       - PolicyDocument:
           Version: "2012-10-17"
@@ -105,7 +142,7 @@ Resources:
             - "sagemaker-mlflow:UpdateRun"
             - "sagemaker-mlflow:GetRun"
             Effect: "Allow"
-            Sid: "Statement1"
+            Sid: "SagemakerMlflowManageRun"
         PolicyName: "SagemakerMlflowManageRun"
       - PolicyDocument:
           Version: "2012-10-17"
@@ -114,8 +151,116 @@ Resources:
             Action:
             - "secretsmanager:GetSecretValue"
             Effect: "Allow"
-            Sid: "Statement1"
+            Sid: "SecretsManagerGetSecretValue"
         PolicyName: "SecretsManagerGetSecretValue"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - !Sub "arn:aws:s3:::${S3BucketName}"
+            - !Sub "arn:aws:s3:::${S3BucketName}/*"
+            Action:
+            - "s3:GetObject"
+            - "s3:PutObject"
+            - "s3:DeleteObject"
+            - "s3:ListBucket"
+            Effect: "Allow"
+            Sid: "S3BucketAccess"
+        PolicyName: "S3BucketAccess"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "ecr:GetAuthorizationToken"
+            Effect: "Allow"
+            Sid: "EcrAuthToken"
+          - Resource: !Sub
+            - "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ecrRepository}"
+            - ecrRepository: !ImportValue Storage-ECRRepository
+            Action:
+            - "ecr:BatchCheckLayerAvailability"
+            - "ecr:BatchGetImage"
+            - "ecr:GetDownloadUrlForLayer"
+            Effect: "Allow"
+            Sid: "EcrPull"
+        PolicyName: "EcrAccess"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "ecs:RunTask"
+            - "ecs:DescribeTaskDefinition"
+            - "ecs:RegisterTaskDefinition"
+            - "ecs:DeregisterTaskDefinition"
+            - "ecs:DescribeTasks"
+            - "ecs:ListTasks"
+            - "ecs:DescribeClusters"
+            Effect: "Allow"
+            Sid: "EcsRunTask"
+        PolicyName: "EcsRunTask"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "ec2:DescribeSubnets"
+            - "ec2:DescribeVpcs"
+            - "ec2:DescribeNetworkInterfaces"
+            Effect: "Allow"
+            Sid: "DescribeVpc"
+        PolicyName: "DescribeVpc"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "lambda:GetFunction"
+            - "lambda:ListFunctions"
+            - "lambda:InvokeFunction"
+            Effect: "Allow"
+            Sid: "InvokeLambda"
+        PolicyName: "InvokeLambda"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "*"
+            Action:
+            - "sagemaker:AddTags"
+            - "sagemaker:CreatePipeline"
+            - "sagemaker:UpdatePipeline"
+            - "sagemaker:DescribePipeline"
+            - "sagemaker:ListPipelines"
+            - "sagemaker:DeletePipeline"
+            - "sagemaker:StartPipelineExecution"
+            - "sagemaker:DescribePipelineExecution"
+            - "sagemaker:ListPipelineExecutions"
+            - "sagemaker:StopPipelineExecution"
+            - "sagemaker:CreateProcessingJob"
+            - "sagemaker:DescribeProcessingJob"
+            - "sagemaker:ListProcessingJobs"
+            - "sagemaker:StopProcessingJob"
+            - "sagemaker:CreateTrainingJob"
+            - "sagemaker:DescribeTrainingJob"
+            - "sagemaker:ListTrainingJobs"
+            - "sagemaker:StopTrainingJob"
+            - "sagemaker:CreateModel"
+            - "sagemaker:DescribeModel"
+            - "sagemaker:ListModels"
+            - "sagemaker:CreateEndpointConfig"
+            - "sagemaker:DescribeEndpointConfig"
+            - "sagemaker:CreateEndpoint"
+            - "sagemaker:UpdateEndpoint"
+            - "sagemaker:DescribeEndpoint"
+            - "sagemaker:ListEndpoints"
+            - "sagemaker:InvokeEndpoint"
+            - "sagemaker:ListTags"
+            - "sagemaker:DescribeModelPackage"
+            - "sagemaker:DescribeModelPackageGroup"
+            Effect: "Allow"
+            Sid: "SageMakerPipelineAccess"
+        PolicyName: "SageMakerPipelineAccess"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:

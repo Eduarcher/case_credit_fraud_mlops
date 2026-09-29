@@ -11,10 +11,21 @@ Resources:
     Properties:
       Path: "/"
       ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess"
-      - "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       MaxSessionDuration: 3600
       RoleName: "APIGatewayInvokeLambdaRole"
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - !ImportValue Lambda-RouteHealthModelArn
+            - !ImportValue Lambda-RouteInferenceModelArn
+            Action:
+            - "lambda:InvokeFunction"
+            Effect: "Allow"
+            Sid: "InvokeRouteLambdas"
+        PolicyName: "InvokeRouteLambdas"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -35,6 +46,17 @@ Resources:
         - "REGIONAL"
       DisableExecuteApiEndpoint: false
       Name: "CaseCreditFraudAPI"
+  ApiGatewayAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: CaseCreditFraudAuthorizer
+      Type: TOKEN
+      RestApiId: !Ref ApiGatewayRestApi
+      AuthorizerUri: !Sub
+        - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaAuthorizerArn}/invocations
+        - LambdaAuthorizerArn: !ImportValue Lambda-AuthorizerArn
+      AuthorizerResultTtlInSeconds: 300
+      IdentitySource: method.request.header.Authorization
   ApiGatewayHealthMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -60,7 +82,8 @@ Resources:
     Type: AWS::ApiGateway::Method
     Properties:
       ApiKeyRequired: true
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref ApiGatewayAuthorizer
       HttpMethod: POST
       Integration: 
         IntegrationHttpMethod: POST
@@ -106,6 +129,13 @@ Resources:
       # note: if route *not* at API Gateway root, `SourceArn` would take the form of:
       #               arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apiGateway}/${apiGatewayStageName}/${apiGatewayHTTPMethod}/PATH_PART
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/${ApiGatewayStage}/GET/
+  ApiGatewayAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !ImportValue Lambda-AuthorizerArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/authorizers/*
   ApiGatewayUsagePlan:
     UpdateReplacePolicy: "Delete"
     Type: "AWS::ApiGateway::UsagePlan"

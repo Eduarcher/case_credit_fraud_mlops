@@ -16,6 +16,8 @@ This project includes a small set of dependencies bundled directly into the repo
 
 **How to update:** These packages are versioned by AWS and tied to the SageMaker container lifecycle. If updating the LightGBM container version, extract the updated wheels from the new container image and replace them here, then update `requirements.txt` to reference the new filenames.
 
+**License:** These wheels are distributed under the Apache License 2.0. The full license text and attribution are provided in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The rest of this repository is governed by the [LICENSE](LICENSE) file.
+
 ## All other dependencies
 
 All other Python packages (LightGBM, Dask, Distributed, MLflow, etc.) are declared as standard PyPI dependencies in their respective `requirements.txt` files. The Lambda layer for MLflow is built at deployment time by `pip install` from its own `requirements.txt`.

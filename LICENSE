@@ -5,6 +5,10 @@ All rights reserved.
 This project is a private portfolio reference. The source code is shared publicly
 for demonstration and evaluation purposes only.
 
+The terms above apply to the project's own source code and configuration. Vendored
+third-party components (listed in THIRD_PARTY_NOTICES.md) remain under their own,
+separate licenses and are not covered by this license.
+
 You may view and study the code, but you may not copy, modify, distribute, publish,
 or create derivative works from it, in whole or in part, for any purpose, without
 prior written permission from the copyright holder.

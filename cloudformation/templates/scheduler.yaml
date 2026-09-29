@@ -18,8 +18,6 @@ Resources:
     DeletionPolicy: "Delete"
     Properties:
       Path: "/service-role/"
-      ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
       MaxSessionDuration: 3600
       RoleName: "EventBridge_SchedulerRole"
       Policies:
@@ -29,11 +27,6 @@ Resources:
           - Resource: "*"
             Action:
             - "ecs:RunTask"
-            Effect: "Allow"
-          - Resource: "*"
-            Action:
-            - "s3:*"
-            - "s3-object-lambda:*"
             Effect: "Allow"
           - Condition:
               StringLike:

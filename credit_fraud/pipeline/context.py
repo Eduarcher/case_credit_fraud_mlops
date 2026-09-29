@@ -116,7 +116,7 @@ class CreditFraudPipelineContext(PipelineSession):
         super().__init__(
             default_bucket=os.environ.get("AWS_SAGEMAKER_S3_BUCKET_NAME", None),
             default_bucket_prefix=os.environ.get(
-                "AWS_SAGEMAKER_S3_BUCKET_FOLDER_PREFIX", "case-credit-fraud"
+                "AWS_SAGEMAKER_S3_BUCKET_NAME_FOLDER_PREFIX", "case-credit-fraud"
             ),
         )
 
@@ -130,7 +130,7 @@ class CreditFraudPipelineContext(PipelineSession):
             "AWS_SAGEMAKER_S3_BUCKET_NAME", self.default_bucket()
         )
         self.bucket_folder_prefix = os.environ.get(
-            "AWS_SAGEMAKER_S3_BUCKET_FOLDER_PREFIX", self.default_bucket_prefix
+            "AWS_SAGEMAKER_S3_BUCKET_NAME_FOLDER_PREFIX", self.default_bucket_prefix
         )
         self.bucket_folder = f"s3://{self.bucket_name}/{self.bucket_folder_prefix}"
 

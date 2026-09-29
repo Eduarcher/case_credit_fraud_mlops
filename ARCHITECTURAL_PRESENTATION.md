@@ -34,9 +34,10 @@ engineering skills it demonstrates, start from the
 5. [API Documentation](#5-api-documentation)
     - [Signature](#signature)
     - [Example](#example)
-6. [Implementation Plan](#6-implementation-plan)
+ 6. [Implementation Plan](#6-implementation-plan)
     - [Prerequisites](#prerequisites)
     - [Infrastructure From CloudFormation](#infrastructure-from-cloudformation)
+    - [Teardown](#teardown)
     - [Debugging](#debugging)
 7. [Configuration](#7-configuration)
     - [Parameters](#parameters)
@@ -83,7 +84,7 @@ The project leverages Amazon SageMaker Pipelines, CodePipeline, CodeBuild, and A
 - SageMaker pipeline steps for PySpark preprocessing, training, evaluation, model creation, MLflow registration (including metrics), and deployment.
 - Automatic deployment with a canary strategy and AWS Auto Scaling.
 - API endpoints deployed through AWS API Gateway.
-- Security and authentication via AWS IAM and API keys.
+- Security via scoped AWS IAM roles, a Lambda authorizer backed by Secrets Manager, and API keys with usage plans for metering and throttling.
 - Logging and monitoring through AWS CloudWatch.
 - Scheduled training via EventBridge Scheduler.
 
@@ -201,11 +202,11 @@ Preprocessing first launches a cluster that reads and processes the data, splits
 
 ![spark-config](imgs/spark.png)
 
-Training supports both XGBoost and LightGBM. Using the training and validation sets, the model is trained, evaluated, and its artifacts saved under the run's `execution_id` folder. The run is also registered as a new MLflow experiment with its validation metrics.
+Training supports both XGBoost and LightGBM. Using the training and validation sets, the model is trained, evaluated, and its artifacts saved under the run's `execution_id` folder. The run is also logged to an MLflow run with its validation metrics.
 
-A dedicated evaluation step then runs the model on the test set and registers the test metrics in MLflow. A conditional gate uses these metrics to accept or reject the model before deployment; rejected runs are aborted and the reason is logged to CloudWatch.
+A dedicated evaluation step then runs the model on both the validation set and the test set. The validation ROC-AUC drives a conditional gate that accepts or rejects the model before deployment; the test metrics are kept as a final, report-only assessment. When a model is rejected, the create, register, and deploy steps are skipped.
 
-Approved models are registered in MLflow and created in SageMaker as deployable models referencing the container image, artifact URI, and preferred instance resources. Registering in MLflow also surfaces the model in the SageMaker Studio model interface, and versions can be compared through the MLflow UI.
+Approved models are registered in MLflow and created in SageMaker as deployable models referencing the container image, artifact URI, and preferred instance resources. Versions can be compared through the MLflow UI.
 
 ![mlflow](imgs/mlflow.png)
 
@@ -232,9 +233,9 @@ The final two components are the inference Lambda function and the API Gateway, 
 
 #### Access Management
 
-AWS IAM role-based access authorizes components to perform their operations, and model endpoint access is authenticated with AWS credentials. Access roles and policies are created with CloudFormation for this case; in production they should be managed by the security and authorization team, and roles should include only the policies necessary for their responsibilities.
+AWS IAM role-based access authorizes components to perform their operations, and model endpoint access is authenticated with AWS credentials. The IAM roles declared in CloudFormation are scoped toward least-privilege for the documented workflow; in a real deployment they should still be reviewed by the security and authorization team before use.
 
-API access is limited to an API key created automatically with CloudFormation and available in the API Gateway console. Combined with a usage plan that limits request rate, this is a simple but effective security measure. New keys can be generated as needed.
+API requests are authenticated by a Lambda authorizer that validates the `Authorization` header against a shared secret stored in AWS Secrets Manager. A separate API key, created automatically with CloudFormation and available in the API Gateway console, is bound to a usage plan that meters and throttles request rate. New keys can be generated as needed.
 
 #### Storage
 
@@ -264,10 +265,10 @@ There are two acceptable requests:
 - Inference endpoint: makes predictions using the trained model.
     - Method: POST
     - Parameters: data (see example)
-    - Authentication: API key required
+    - Authentication: Lambda authorizer (`Authorization` header), plus the API key from the usage plan
     - Response:
         - Status code: 200 OK
-        - Body: fraud odds for each transaction
+        - Body: fraud probability for each transaction
 
 ### Example
 
@@ -276,6 +277,7 @@ Example request inferring fraud probability for two transactions:
 ```
 POST <YOUR-API-GATEWAY-URL>/dev
 Content-Type: application/json
+Authorization: <YOUR_AUTH_TOKEN>
 x-api-key: <YOUR_API_KEY>
 Body:
 {
@@ -320,7 +322,13 @@ Response: [0.0037515881747243, 0.4022510714509944]
 > Tested in the us-east-1 region.
 
 > [!WARNING]
-> Not every component is eligible for the AWS Free Tier.
+> Not every component is eligible for the AWS Free Tier, and the deployment
+> provisions paid resources that keep incurring charges until they are removed.
+> The SageMaker endpoint (a minimum of two `ml.m4.xlarge` instances) and its
+> auto-scaling configuration are created by the deploy Lambda rather than as
+> CloudFormation resources, and the managed MLflow server is provisioned
+> outside the stack — so `cloudformation/uninstall.sh` does **not** remove them.
+> See [Teardown](#teardown) before deploying.
 
 ### Prerequisites
 
@@ -336,6 +344,10 @@ Response: [0.0037515881747243, 0.4022510714509944]
     - Note the server ARN and write it to `.env`.
 > [!WARNING]
 > The MLflow server is expensive at the moment; turn it off when not in use.
+- Create the API authorizer secret in AWS Secrets Manager.
+    - Store a JSON string such as `{"api_key": "<YOUR_AUTH_TOKEN>"}` and write
+      the secret name to `.env` as `API_KEY_SECRET_NAME`. This token is the
+      value sent in the `Authorization` header of inference requests.
 - [Connect AWS to GitHub](#AWSGithub).
     - The easiest method is to simulate creating a new CodePipeline and stop at step 2 after connecting to GitHub (version 2). There is no need to finish creating the pipeline.
     - The connection requires a GitHub application associated with the repository.
@@ -354,11 +366,26 @@ Infrastructure as code is deployed from the templates in the `cloudformation` di
 The script `cloudformation/install.sh` installs the stacks, while `cloudformation/uninstall.sh` removes them. Stacks can also be updated, but that requires specialized intervention.
 
 > [!NOTE]
+> `install.sh` issues fixed-name `aws cloudformation create-stack` calls and is
+> therefore **not idempotent** — re-running it against an existing stack will
+> fail. This reflects a CloudFormation design constraint at the time the project
+> was written rather than a deliberate feature; re-installation requires
+> removing the stacks first.
+>
 > This installation was tested on macOS and Ubuntu.
 >
 > If a stack installation fails, delete all stacks individually. The `storage-stack` does not delete any resource when uninstalled, to avoid data loss; delete it manually if needed to reinstall.
 
 After that, merge to the project repository to start the integration pipeline: process data, train, evaluate, and deploy the model endpoint.
+
+### Teardown
+
+To stop incurring charges, remove the resources that `cloudformation/uninstall.sh` does **not** handle, in addition to running that script:
+
+1. Delete the SageMaker endpoint (`CaseCreditFraudPipeline-endpoint`) and its endpoint configuration from the SageMaker console or CLI.
+2. Delete the Application Auto Scaling scalable target and scaling policies registered for the endpoint variant.
+3. Stop or delete the managed MLflow tracking server (see the SageMaker console).
+4. Delete the `storage` stack's retained resources (the `codepipeline-credit-fraud-<account>` S3 bucket and the `credit-fraud-<account>` ECR repository), which use a `Retain` deletion policy.
 
 ### Debugging
 
@@ -419,7 +446,7 @@ Every parameter belongs to a parameter group, which is required when referencing
 
 #### Registry
 
-- **RegisterModelLambdaFunctionName:** name of the Lambda function that registers the trained model in MLflow and the SageMaker model registry.
+- **RegisterModelLambdaFunctionName:** name of the Lambda function that registers the trained model in MLflow.
 
 #### Deployment
 
@@ -446,6 +473,7 @@ The `.env` file must be created from `.env.example` and has required and optiona
 - **AWS_SAGEMAKER_S3_BUCKET_NAME_FOLDER_PREFIX:** prefix for data stored on S3.
 - **MLFLOW_ARN:** MLflow tracking server ARN. [Created manually](#SagemakerMLFlowSetup).
 - **VPC_ID:** VPC identifier for running multiple tasks; can match the SageMaker domain.
+- **API_KEY_SECRET_NAME:** name of the Secrets Manager secret holding the API authorizer token (JSON such as `{"api_key": "..."}`). [Created manually](#prerequisites).
 - **CRON_SCHEDULE:** cron schedule for running the training and deployment pipeline regularly.
 - **RDS_HOST_URL:** (Optional) host URL for the RDS MySQL database. Not needed for the S3 source.
 - **RDS_SECRET_NAME:** (Optional) secret name in AWS Secrets Manager for the RDS MySQL database. Not needed for the S3 source.
@@ -491,13 +519,13 @@ Because every model stores training and testing data, storage can grow significa
 
 ### Integrate with Grafana or Similar
 
-Integration with a visual observability platform such as Grafana or Kibana would centralize data into accessible dashboards. Logs, pipeline runs, model deployments, and metrics are currently spread across CloudWatch, MLflow, the SageMaker model registry, and component dashboards; funneling them into a single platform would simplify monitoring.
+Integration with a visual observability platform such as Grafana or Kibana would centralize data into accessible dashboards. Logs, pipeline runs, model deployments, and metrics are currently spread across CloudWatch, MLflow, and component dashboards; funneling them into a single platform would simplify monitoring.
 
 ### Others
 
 - Optimize latency: accelerate model inference and optimize latency to improve API performance.
 - Multi-zone deployment: maximize availability by deploying across zones, avoiding disruption even in extreme conditions.
-- API access management refinement: implement additional authentication methods, such as API Gateway authorizers.
+- API access management refinement: extend the existing Lambda authorizer with richer identity options, such as an IAM authorizer or a Cognito/OAuth-backed authorizer.
 
 ## 9. References
 

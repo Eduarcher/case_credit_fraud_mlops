@@ -47,7 +47,8 @@ aws cloudformation create-stack --stack-name ecs-stack \
     --template-body file://cloudformation/templates/ecs.yaml \
     --capabilities CAPABILITY_NAMED_IAM \
     --parameters ParameterKey=ECSTaskDefinitionName,ParameterValue=${ECS_ECSTaskDefinitionName} \
-    ParameterKey=ContainerEnvironmentFileS3ARN,ParameterValue=${ENV_FILE_S3_ARN} && \
+    ParameterKey=ContainerEnvironmentFileS3ARN,ParameterValue=${ENV_FILE_S3_ARN} \
+    ParameterKey=S3BucketName,ParameterValue=${AWS_SAGEMAKER_S3_BUCKET_NAME} && \
 aws cloudformation wait stack-create-complete --stack-name ecs-stack
 
 ###########################################
@@ -60,6 +61,7 @@ zip -j -r .cftmp/lambda_functions/lambda_register_model.zip cloudformation/src/l
 zip -j -r .cftmp/lambda_functions/lambda_deploy_model.zip cloudformation/src/lambda/deploy_model && \
 zip -j -r .cftmp/lambda_functions/lambda_route_health_model.zip cloudformation/src/lambda/route_health && \
 zip -j -r .cftmp/lambda_functions/lambda_route_inference_model.zip cloudformation/src/lambda/route_inference && \
+zip -j -r .cftmp/lambda_functions/lambda_authorizer.zip cloudformation/src/lambda/authorizer && \
 aws s3 cp .cftmp/lambda_functions \
     s3://${AWS_SAGEMAKER_S3_BUCKET_NAME}/${AWS_SAGEMAKER_S3_BUCKET_NAME_FOLDER_PREFIX}/lambda_functions/ \
     --recursive
@@ -85,6 +87,9 @@ aws cloudformation create-stack --stack-name lambda-functions \
     ParameterKey=LambdaDeployModelFunctionName,ParameterValue=${Deployment_DeployLambdaFunctionName} \
     ParameterKey=LambdaRouteHealthModelFunctionName,ParameterValue=${APIGateway_InferenceHealthLambdaFunctionName} \
     ParameterKey=LambdaRouteInferenceModelFunctionName,ParameterValue=${APIGateway_InferenceEndpointLambdaFunctionName} \
+    ParameterKey=LambdaAuthorizerFunctionName,ParameterValue=${APIGateway_AuthorizerLambdaFunctionName} \
+    ParameterKey=APIKeySecretName,ParameterValue=${API_KEY_SECRET_NAME} \
+    ParameterKey=MlflowServerArn,ParameterValue=${MLFLOW_ARN} \
     ParameterKey=EndpointName,ParameterValue=${Deployment_EndpointName} \
     ParameterKey=RunPipelineECSTaskDefinitionName,ParameterValue=${ECS_ECSTaskDefinitionName} \
     ParameterKey=RunPipelineVPCID,ParameterValue=${VPC_ID} \

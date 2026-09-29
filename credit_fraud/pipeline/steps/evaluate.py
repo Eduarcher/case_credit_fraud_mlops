@@ -45,13 +45,21 @@ class EvaluateStepJob(Step):
             path="evaluation.json",
         )
 
-    def build(self, model_artifact_s3_uri: str, test_data_uri: str) -> ProcessingStep:
+    def build(
+        self,
+        model_artifact_s3_uri: str,
+        validation_data_uri: str,
+        test_data_uri: str,
+    ) -> ProcessingStep:
         """
         Builds the evaluation step of the pipeline.
 
         Args:
             model_artifact_s3_uri (str): The S3 URI of the model artifact.
-            test_data_uri (str): The URI of the test data.
+            validation_data_uri (str): The URI of the validation data used to
+                drive the deployment gate.
+            test_data_uri (str): The URI of the test data used for the final,
+                report-only evaluation.
 
         Returns:
             ProcessingStep: The evaluation step of the pipeline.
@@ -64,6 +72,10 @@ class EvaluateStepJob(Step):
                 ProcessingInput(
                     source=model_artifact_s3_uri,
                     destination="/opt/ml/processing/model",
+                ),
+                ProcessingInput(
+                    source=validation_data_uri,
+                    destination="/opt/ml/processing/validation.parquet",
                 ),
                 ProcessingInput(
                     source=test_data_uri,

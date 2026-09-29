@@ -58,6 +58,9 @@ def run():
     )
     evaluation_step = EvaluateStepJob(context, evaluation_model_image_uri).build(
         model_artifact_s3_uri=train_step.properties.ModelArtifacts.S3ModelArtifacts,
+        validation_data_uri=preprocess_step.properties.ProcessingOutputConfig.Outputs[
+            "validation.parquet"
+        ].S3Output.S3Uri,
         test_data_uri=preprocess_step.properties.ProcessingOutputConfig.Outputs[
             "test.parquet"
         ].S3Output.S3Uri,
@@ -82,12 +85,12 @@ def run():
         left=JsonGet(
             step_name=evaluation_step.name,
             property_file=evaluation_step.property_files[0],
-            json_path="classification_metrics.ROC-AUC.value",
+            json_path="validation.classification_metrics.ROC-AUC.value",
         ),
         right=context.pipeline_params["roc_auc_min_threshold"],
     )
     validate_performance_condition_step = ConditionStep(
-        name="ValidatePerformanceConditional",
+        name="ValidateValidationPerformance",
         conditions=[cond_gte],
         if_steps=[create_model_step, register_model_step, deploy_step],
         else_steps=[],

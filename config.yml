@@ -40,3 +40,4 @@ Deployment:
 APIGateway:
   InferenceEndpointLambdaFunctionName: sagemaker-case-credit-fraud-v1-endpoint-inference
   InferenceHealthLambdaFunctionName: sagemaker-case-credit-fraud-v1-endpoint-inference-health
+  AuthorizerLambdaFunctionName: sagemaker-case-credit-fraud-v1-api-authorizer

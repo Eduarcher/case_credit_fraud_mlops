@@ -53,6 +53,7 @@ addopts = """
 --cov credit_fraud \
 --color yes \
 --cov-fail-under 10 \
+--junitxml=unittests.xml \
 -ra \
 -W ignore"""
 testpaths = [

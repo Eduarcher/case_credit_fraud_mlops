@@ -35,6 +35,38 @@ def install_dependencies(model_algorithm):
     import mlflow
 
 
+def compute_metrics(y_true, predictions):
+    pred_class = np.where(predictions > 0.5, 1, 0)
+    roc_auc = roc_auc_score(y_true, predictions)
+    bacc = balanced_accuracy_score(y_true, pred_class)
+    cm = confusion_matrix(y_true, pred_class)
+    return {
+        "classification_metrics": {
+            "ROC-AUC": {"value": roc_auc},
+            "Balanced-Accuracy": {"value": bacc},
+            "True Negative": {"value": int(cm[0][0])},
+            "False Positive": {"value": int(cm[0][1])},
+            "False Negative": {"value": int(cm[1][0])},
+            "True Positive": {"value": int(cm[1][1])},
+        }
+    }
+
+
+def evaluate_split(model, df, model_algorithm):
+    y = df["Class"]
+    X = df.drop("Class", axis=1)
+    if model_algorithm == "xgboost":
+        X = xgb.DMatrix(X)
+    predictions = model.predict(X)
+    return compute_metrics(y, predictions)
+
+
+def log_metrics(prefix, metrics):
+    for key, value in metrics["classification_metrics"].items():
+        metric_name = key.replace(" ", "-")
+        mlflow.log_metric(f"{prefix}/{metric_name}", value["value"])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-algorithm", type=str, default="xgboost")
@@ -54,47 +86,35 @@ if __name__ == "__main__":
         tar.extractall(path=".")
     model = pickle.load(open("model.pkl", "rb"))
 
-    logger.info("Reading test data.")
+    logger.info("Reading validation and test data.")
+    df_validation = pd.read_parquet("/opt/ml/processing/validation.parquet")
     df_test = pd.read_parquet("/opt/ml/processing/test.parquet")
-    y_test = df_test["Class"]
-    X_test = df_test.drop("Class", axis=1)
-    if args.model_algorithm == "xgboost":
-        X_test = xgb.DMatrix(X_test)
 
-    logger.info("Generating predictions for test data.")
-    pred = model.predict(X_test)
-    pred_class = np.where(pred > 0.5, 1, 0)
+    logger.info("Evaluating the model on the validation set.")
+    validation_metrics = evaluate_split(model, df_validation, args.model_algorithm)
 
-    # Calculate model evaluation score
-    logger.debug("Calculating ROC-AUC score.")
-    roc_auc_test = roc_auc_score(y_test, pred)
-    bacc_test = balanced_accuracy_score(y_test, pred_class)
-    cm = confusion_matrix(y_test, pred_class)
+    logger.info("Evaluating the model on the test set.")
+    test_metrics = evaluate_split(model, df_test, args.model_algorithm)
+
+    # The validation metrics drive the deployment gate; the test metrics are
+    # kept as a final, report-only assessment.
     metric_dict = {
-        "classification_metrics": {
-            "ROC-AUC": {"value": roc_auc_test},
-            "Balanced-Accuracy": {"value": bacc_test},
-            "True Negative": {"value": str(cm[0][0])},
-            "False Positive": {"value": str(cm[0][1])},
-            "False Negative": {"value": str(cm[1][0])},
-            "True Positive": {"value": str(cm[1][1])},
-        }
+        "validation": validation_metrics,
+        "test": test_metrics,
     }
 
     # Save model evaluation metrics
     output_dir = "/opt/ml/processing/evaluation"
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    logger.info("Writing evaluation report with ROC-AUC: %f", roc_auc_test)
+    logger.info(
+        "Writing evaluation report with validation ROC-AUC: %f",
+        validation_metrics["classification_metrics"]["ROC-AUC"]["value"],
+    )
     evaluation_path = f"{output_dir}/evaluation.json"
     with open(evaluation_path, "w") as f:
         f.write(json.dumps(metric_dict))
 
-    mlflow.log_metric("Test/Balanced-Accuracy", bacc_test)
-    mlflow.log_metric("Test/ROC-AUC", roc_auc_test)
-    t_n, f_p, f_n, t_p = cm.ravel()
-    mlflow.log_metric("Test/True-Negative", t_n)
-    mlflow.log_metric("Test/False-Positive", f_p)
-    mlflow.log_metric("Test/False-Negative", f_n)
-    mlflow.log_metric("Test/True-Positive", t_p)
+    log_metrics("Validation", validation_metrics)
+    log_metrics("Test", test_metrics)
     mlflow.end_run()

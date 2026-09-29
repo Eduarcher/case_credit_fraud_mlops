@@ -43,6 +43,16 @@ Parameters:
     Type: String
     Default: lambda_route_inference_model
     Description: Name of the Lambda function that routes inference requests to the model endpoint
+  LambdaAuthorizerFunctionName:
+    Type: String
+    Default: lambda_authorizer
+    Description: Name of the Lambda function that authorizes API Gateway requests
+  APIKeySecretName:
+    Type: String
+    Description: Name of the Secrets Manager secret holding the API key used by the API Gateway authorizer
+  MlflowServerArn:
+    Type: String
+    Description: ARN of the managed MLflow tracking server
 Resources:
   MLFlowLambdaRole:
     UpdateReplacePolicy: "Delete"
@@ -52,17 +62,15 @@ Resources:
       Path: "/"
       ManagedPolicyArns:
       - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-      - "arn:aws:iam::aws:policy/AWSLambdaExecute"
-      - "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
       MaxSessionDuration: 3600
       RoleName: "MLFlowLambdaRole"
-      Description: ""
+      Description: "Role for the Lambda function that registers models in MLflow"
       Policies:
       - PolicyDocument:
           Version: "2012-10-17"
           Statement:
           - Resource:
-            - "*"
+            - !Ref MlflowServerArn
             Action:
             - "sagemaker-mlflow:*"
             Effect: "Allow"
@@ -83,7 +91,6 @@ Resources:
       Path: "/"
       ManagedPolicyArns:
       - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-      - "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
       MaxSessionDuration: 3600
       RoleName: "SagemakerLambdaInvokeRole"
       Description: "Allows Lambda functions to call AWS services on your behalf."
@@ -151,6 +158,33 @@ Resources:
           Effect: "Allow"
           Principal:
             Service: "sagemaker.amazonaws.com"
+  APIGatewayAuthorizerRole:
+    UpdateReplacePolicy: "Delete"
+    Type: "AWS::IAM::Role"
+    DeletionPolicy: "Delete"
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      MaxSessionDuration: 3600
+      RoleName: "APIGatewayAuthorizerRole"
+      Policies:
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${APIKeySecretName}*"
+            Action:
+            - "secretsmanager:GetSecretValue"
+            Effect: "Allow"
+            Sid: "ReadApiKeySecret"
+        PolicyName: "ReadApiKeySecret"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "lambda.amazonaws.com"
   LambdaLayerMlflowSkinny:
     Type: AWS::Lambda::LayerVersion
     Properties:
@@ -165,7 +199,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Ref LambdaRunPipelineFunctionName
-      Runtime: python3.8
+      Runtime: python3.11
       Handler: lambda_run_pipeline.lambda_handler
       Environment:
         Variables:
@@ -195,7 +229,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Ref LambdaDeployModelFunctionName
-      Runtime: python3.8
+      Runtime: python3.11
       Handler: lambda_deploy_model.lambda_handler
       Environment:
         Variables:
@@ -210,7 +244,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Ref LambdaRouteHealthModelFunctionName
-      Runtime: python3.8
+      Runtime: python3.11
       Handler: lambda_health.lambda_handler
       Environment:
         Variables:
@@ -224,7 +258,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Ref LambdaRouteInferenceModelFunctionName
-      Runtime: python3.8
+      Runtime: python3.11
       Handler: lambda_inference.lambda_handler
       Environment:
         Variables:
@@ -234,6 +268,20 @@ Resources:
         S3Bucket: !Ref S3BucketName
         S3Key: case-credit-fraud/lambda_functions/lambda_route_inference_model.zip
       Timeout: 120
+  LambdaAuthorizer:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaAuthorizerFunctionName
+      Runtime: python3.11
+      Handler: lambda_authorizer.lambda_handler
+      Environment:
+        Variables:
+          API_KEY_SECRET_NAME: !Ref APIKeySecretName
+      Role: !GetAtt APIGatewayAuthorizerRole.Arn
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: case-credit-fraud/lambda_functions/lambda_authorizer.zip
+      Timeout: 10
 Outputs:
   LambdaRouteHealthModelArn:
     Description: "ARN of the Lambda function that routes health checks to the model endpoint"
@@ -245,3 +293,8 @@ Outputs:
     Value: !GetAtt LambdaRouteInferenceModel.Arn
     Export:
       Name: Lambda-RouteInferenceModelArn
+  LambdaAuthorizerArn:
+    Description: "ARN of the Lambda function that authorizes API Gateway requests"
+    Value: !GetAtt LambdaAuthorizer.Arn
+    Export:
+      Name: Lambda-AuthorizerArn
