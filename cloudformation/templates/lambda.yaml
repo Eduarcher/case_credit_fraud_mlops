@@ -4,6 +4,10 @@ Parameters:
   S3BucketName:
     Type: String
     Description: Enter a valid accessible S3 bucket name for installation
+  S3BucketPrefix:
+    Type: String
+    Default: case-credit-fraud
+    Description: S3 key prefix under which the Lambda packages and layers are uploaded
   LambdaRunPipelineFunctionName:
     Type: String
     Default: lambda_run_pipeline
@@ -192,7 +196,7 @@ Resources:
         - python3.11
       Content: 
         S3Bucket: !Ref S3BucketName
-        S3Key: case-credit-fraud/lambda_layers/lambda_layer_mlflow_skinny.zip
+        S3Key: !Sub "${S3BucketPrefix}/lambda_layers/lambda_layer_mlflow_skinny.zip"
       Description: Lambda Layer for mLflow-skinny
       LayerName: mlflowskinny
   LambdaRunPipeline:
@@ -209,7 +213,7 @@ Resources:
       Role: !ImportValue ecs-task-definition-ECSExecutionRoleARN
       Code:
         S3Bucket: !Ref S3BucketName
-        S3Key: case-credit-fraud/lambda_functions/lambda_run_pipeline.zip
+        S3Key: !Sub "${S3BucketPrefix}/lambda_functions/lambda_run_pipeline.zip"
       Timeout: 60
   LambdaRegisterModel:
     Type: AWS::Lambda::Function
@@ -223,7 +227,7 @@ Resources:
       Role: !GetAtt MLFlowLambdaRole.Arn
       Code:
         S3Bucket: !Ref S3BucketName
-        S3Key: case-credit-fraud/lambda_functions/lambda_register_model.zip
+        S3Key: !Sub "${S3BucketPrefix}/lambda_functions/lambda_register_model.zip"
       Timeout: 60
   LambdaDeployModel:
     Type: AWS::Lambda::Function
@@ -238,7 +242,7 @@ Resources:
       Role: !GetAtt SagemakerLambdaInvokeRole.Arn
       Code:
         S3Bucket: !Ref S3BucketName
-        S3Key: case-credit-fraud/lambda_functions/lambda_deploy_model.zip
+        S3Key: !Sub "${S3BucketPrefix}/lambda_functions/lambda_deploy_model.zip"
       Timeout: 900
   LambdaRouteHealthModel:
     Type: AWS::Lambda::Function
@@ -252,7 +256,7 @@ Resources:
       Role: !ImportValue ecs-task-definition-ECSExecutionRoleARN
       Code:
         S3Bucket: !Ref S3BucketName
-        S3Key: case-credit-fraud/lambda_functions/lambda_route_health_model.zip
+        S3Key: !Sub "${S3BucketPrefix}/lambda_functions/lambda_route_health_model.zip"
       Timeout: 10
   LambdaRouteInferenceModel:
     Type: AWS::Lambda::Function
@@ -266,7 +270,7 @@ Resources:
       Role: !ImportValue ecs-task-definition-ECSExecutionRoleARN
       Code:
         S3Bucket: !Ref S3BucketName
-        S3Key: case-credit-fraud/lambda_functions/lambda_route_inference_model.zip
+        S3Key: !Sub "${S3BucketPrefix}/lambda_functions/lambda_route_inference_model.zip"
       Timeout: 120
   LambdaAuthorizer:
     Type: AWS::Lambda::Function
@@ -280,7 +284,7 @@ Resources:
       Role: !GetAtt APIGatewayAuthorizerRole.Arn
       Code:
         S3Bucket: !Ref S3BucketName
-        S3Key: case-credit-fraud/lambda_functions/lambda_authorizer.zip
+        S3Key: !Sub "${S3BucketPrefix}/lambda_functions/lambda_authorizer.zip"
       Timeout: 10
 Outputs:
   LambdaRouteHealthModelArn:

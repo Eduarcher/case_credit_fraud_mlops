@@ -82,6 +82,7 @@ aws cloudformation create-stack --stack-name lambda-functions \
     --template-body file://cloudformation/templates/lambda.yaml \
     --capabilities CAPABILITY_NAMED_IAM \
     --parameters ParameterKey=S3BucketName,ParameterValue=${AWS_SAGEMAKER_S3_BUCKET_NAME} \
+    ParameterKey=S3BucketPrefix,ParameterValue=${AWS_SAGEMAKER_S3_BUCKET_NAME_FOLDER_PREFIX} \
     ParameterKey=LambdaRunPipelineFunctionName,ParameterValue=${ECS_RunPipelineLambdaFunctionName} \
     ParameterKey=LambdaRegisterModelFunctionName,ParameterValue=${Registry_RegisterModelLambdaFunctionName} \
     ParameterKey=LambdaDeployModelFunctionName,ParameterValue=${Deployment_DeployLambdaFunctionName} \

@@ -19,14 +19,24 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
 
+def _normalize_algorithm(model_algorithm):
+    algorithm = model_algorithm.lower()
+    if algorithm in ("xgboost", "xgb"):
+        return "xgboost"
+    if algorithm in ("lgbm", "lightgbm"):
+        return "lgbm"
+    raise ValueError(f"Unsupported model algorithm: {model_algorithm}")
+
+
 def install_dependencies(model_algorithm):
     logger.info("Attempting to install dependencies")
+    model_algorithm = _normalize_algorithm(model_algorithm)
     if model_algorithm == "xgboost":
         global xgb
         import xgboost as xgb
     elif model_algorithm == "lgbm":
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "lightgbm==4.1.0"]
+            [sys.executable, "-m", "pip", "install", "lightgbm==3.3.3"]
         )
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "mlflow>=2.13", "sagemaker-mlflow"]
@@ -53,6 +63,7 @@ def compute_metrics(y_true, predictions):
 
 
 def evaluate_split(model, df, model_algorithm):
+    model_algorithm = _normalize_algorithm(model_algorithm)
     y = df["Class"]
     X = df.drop("Class", axis=1)
     if model_algorithm == "xgboost":

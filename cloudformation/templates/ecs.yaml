@@ -203,6 +203,18 @@ Resources:
       - PolicyDocument:
           Version: "2012-10-17"
           Statement:
+          - Condition:
+              StringEquals:
+                iam:PassedToService: "ecs-tasks.amazonaws.com"
+            Resource:
+            - !GetAtt ECSExecutionRole.Arn
+            Action: "iam:PassRole"
+            Effect: "Allow"
+            Sid: "PassRoleToEcsTasks"
+        PolicyName: "PassRoleToEcsTasks"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
           - Resource: "*"
             Action:
             - "ec2:DescribeSubnets"

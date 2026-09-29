@@ -233,7 +233,7 @@ The final two components are the inference Lambda function and the API Gateway, 
 
 #### Access Management
 
-AWS IAM role-based access authorizes components to perform their operations, and model endpoint access is authenticated with AWS credentials. The IAM roles declared in CloudFormation are scoped toward least-privilege for the documented workflow; in a real deployment they should still be reviewed by the security and authorization team before use.
+AWS IAM role-based access authorizes components to perform their operations, and model endpoint access is authenticated with AWS credentials. The IAM roles declared in CloudFormation are scoped to the actions the documented workflow requires rather than relying on managed `FullAccess` policies, but they are not strictly least-privilege; in a real deployment they should still be reviewed by the security and authorization team before use.
 
 API requests are authenticated by a Lambda authorizer that validates the `Authorization` header against a shared secret stored in AWS Secrets Manager. A separate API key, created automatically with CloudFormation and available in the API Gateway console, is bound to a usage plan that meters and throttles request rate. New keys can be generated as needed.
 
@@ -386,6 +386,7 @@ To stop incurring charges, remove the resources that `cloudformation/uninstall.s
 2. Delete the Application Auto Scaling scalable target and scaling policies registered for the endpoint variant.
 3. Stop or delete the managed MLflow tracking server (see the SageMaker console).
 4. Delete the `storage` stack's retained resources (the `codepipeline-credit-fraud-<account>` S3 bucket and the `credit-fraud-<account>` ECR repository), which use a `Retain` deletion policy.
+5. Delete the API authorizer secret created manually in AWS Secrets Manager (the name stored in `API_KEY_SECRET_NAME`).
 
 ### Debugging
 
