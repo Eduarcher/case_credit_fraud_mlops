@@ -16,7 +16,8 @@ def lambda_handler(event, context=None):
     model_path = event.get("model_path")
     model_name = event.get("model_name")
 
-    # Construct the full path to the model artifact
+    # Build the run-relative model URI. The model is logged by MLflow
+    # autologging during training under the "model" artifact path.
     model_uri = f"runs:/{run_id}/{model_path}"
 
     # Register the model

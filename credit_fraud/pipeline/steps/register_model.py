@@ -28,12 +28,13 @@ class RegisterModelStepJob(Step):
         )
         self.lambda_func = Lambda(function_arn=response["Configuration"]["FunctionArn"])
 
-    def build(self, model_artifact_s3_uri: str):
+    def build(self):
         """
         Builds the RegisterModelStep.
 
-        Args:
-            model_artifact_s3_uri (str): The S3 URI of the model artifact.
+        The trained model is logged to the MLflow run by autologging during the
+        training job under the "model" artifact path, so registration references
+        that artifact through the run URI.
 
         Returns:
             LambdaStep: The RegisterModelStep.
@@ -62,7 +63,7 @@ class RegisterModelStepJob(Step):
             inputs={
                 "mlflow_arn": self.context.mlflow.server_arn,
                 "run_id": self.context.mlflow.experiment_run_id,
-                "model_path": model_artifact_s3_uri,
+                "model_path": "model",
                 "model_name": model_name,
             },
             outputs=[status_code, response_body],

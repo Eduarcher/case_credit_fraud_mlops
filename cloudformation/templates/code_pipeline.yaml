@@ -164,7 +164,7 @@ Resources:
         BuildSpec: buildspec.yml
         Location: !Sub https://github.com/${GitHubRepositoryName}
       Environment:
-        PrivilegedMode: False
+        PrivilegedMode: True
         Type: LINUX_CONTAINER
         Image: aws/codebuild/standard:7.0
         ComputeType: BUILD_GENERAL1_SMALL

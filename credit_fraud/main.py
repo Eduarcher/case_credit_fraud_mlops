@@ -73,9 +73,7 @@ def run():
         model_artifact_s3_uri=train_step.properties.ModelArtifacts.S3ModelArtifacts
     )
 
-    register_model_step = RegisterModelStepJob(context).build(
-        model_artifact_s3_uri=train_step.properties.ModelArtifacts.S3ModelArtifacts,
-    )
+    register_model_step = RegisterModelStepJob(context).build()
 
     deploy_step = DeployEndpointStepJob(context).build(
         model_name=create_model_step.properties.ModelName,
