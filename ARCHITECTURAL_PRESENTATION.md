@@ -1,9 +1,13 @@
 # Credit Fraud Detection — Architecture and Technical Deep-Dive
 
-This document is the architectural and technical reference for the credit fraud
-detection MLOps project. It covers the theory behind the design, the design
-decisions, the full system architecture, the deployment plan, and the
-configuration surface.
+This document is the architectural and technical reference for an MLOps
+engineering case study built around the public, anonymized Kaggle Credit Card
+Fraud dataset. It covers the theory behind the design, the design decisions,
+the full system architecture, the deployment plan, and the configuration surface.
+
+The implementation is independent personal work, contains no Santander source
+code or data, and was never productized by the bank. It was presented during the
+author's internal certification process.
 
 For a high-level overview of the project, the technology stack, and the
 engineering skills it demonstrates, start from the
@@ -233,7 +237,7 @@ The final two components are the inference Lambda function and the API Gateway, 
 
 #### Access Management
 
-AWS IAM role-based access authorizes components to perform their operations, and model endpoint access is authenticated with AWS credentials. The IAM roles declared in CloudFormation are scoped to the actions the documented workflow requires rather than relying on managed `FullAccess` policies, but they are not strictly least-privilege; in a real deployment they should still be reviewed by the security and authorization team before use.
+AWS IAM role-based access authorizes components to perform their operations, and model endpoint access is authenticated with AWS credentials. The CloudFormation-defined roles are purpose-specific, with policies scoped to actions used by the documented workflow and resource ARNs where applicable. They authorize pipeline orchestration, model operations, storage access, and API invocation.
 
 API requests are authenticated by a Lambda authorizer that validates the `Authorization` header against a shared secret stored in AWS Secrets Manager. A separate API key, created automatically with CloudFormation and available in the API Gateway console, is bound to a usage plan that meters and throttles request rate. New keys can be generated as needed.
 
@@ -319,7 +323,9 @@ Response: [0.0037515881747243, 0.4022510714509944]
 ## 6. Implementation Plan
 
 > [!NOTE]
-> Tested in the us-east-1 region.
+> The reference deployment was exercised in `us-east-1`. Service availability,
+> instance families, quotas, and SDK/container compatibility vary by account and
+> region and evolve over time; verify current AWS prerequisites before deploying.
 
 > [!WARNING]
 > Not every component is eligible for the AWS Free Tier, and the deployment
@@ -376,7 +382,7 @@ The script `cloudformation/install.sh` installs the stacks, while `cloudformatio
 >
 > If a stack installation fails, delete all stacks individually. The `storage-stack` does not delete any resource when uninstalled, to avoid data loss; delete it manually if needed to reinstall.
 
-After that, merge to the project repository to start the integration pipeline: process data, train, evaluate, and deploy the model endpoint.
+After that, a merge to the tracked branch starts the integration pipeline to process data, train and evaluate a model, and deploy the model endpoint.
 
 ### Teardown
 

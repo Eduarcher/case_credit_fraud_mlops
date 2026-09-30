@@ -1,2 +1,2 @@
-mlflow>=2.13
-sagemaker-mlflow
+mlflow==2.14.2
+sagemaker-mlflow==0.1.0

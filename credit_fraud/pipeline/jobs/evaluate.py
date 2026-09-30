@@ -39,7 +39,14 @@ def install_dependencies(model_algorithm):
             [sys.executable, "-m", "pip", "install", "lightgbm==3.3.3"]
         )
     subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "mlflow>=2.13", "sagemaker-mlflow"]
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "mlflow==2.14.2",
+            "sagemaker-mlflow==0.1.0",
+        ]
     )
     global mlflow
     import mlflow

@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a **private portfolio/reference project** showcasing an
+This repository is a **personal portfolio/reference project** showcasing an
 end-to-end MLOps solution for credit fraud detection.
 
 It is **not an active open-source project**, and external contributions

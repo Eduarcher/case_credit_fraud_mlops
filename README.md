@@ -1,24 +1,22 @@
-# Credit Fraud Detection — End-to-End MLOps on AWS
+# Credit Fraud Detection — MLOps Engineering Case Study
 
-An end-to-end machine learning pipeline for credit card fraud detection that processes raw transactions from a configured S3 or RDS source to train and deploy a live auto-scaling inference endpoint, with CI/CD, model governance, and experiment tracking built in.
+An MLOps engineering case study using the public, anonymized Kaggle Credit Card Fraud dataset. It demonstrates an end-to-end AWS workflow that processes transactions from a configured S3 or RDS source, trains and evaluates models, and deploys an auto-scaling inference endpoint with CI/CD, model governance, and experiment tracking.
 
 ![architecture-overview](imgs/overview.png)
 
 The project automates the training and deployment workflow on AWS: data is sourced from S3 or RDS, prepared with PySpark or scikit-learn, used to train XGBoost and LightGBM models inside Amazon SageMaker Pipelines, evaluated against a quality gate, registered in MLflow, and deployed to a SageMaker real-time endpoint through a canary release with automatic scaling. A CodePipeline-driven CI/CD flow ties it all together, and an EventBridge schedule retrains the model on a regular cadence.
 
-> This project was built independently for study and portfolio purposes and
-> reflects end-to-end ownership — from infrastructure definition to model
-> serving — by its author. It is production-oriented in design, but adapting it
-> to a real company's data, security/authentication, IAM, business metrics, and
-> operational requirements would be a separate effort.
+> I built this independently as a personal portfolio project using public data
+> and presented it during Santander's internal certification process, where I
+> received the "ML Engineering Expert" recognition. The repository contains no
+> Santander source code or data, and the project was never productized by the
+> bank. It explores production MLOps concerns; applying it in an organization
+> would involve adapting it to that organization's data, security, IAM, business
+> metrics, and operational requirements.
 
-**Recognition.** This project was developed as part of Santander's internal
-certification process, where its author received the "ML Engineering Expert"
-designation — an internal recognition within the organization.
+## Engineering objective
 
-## What it solves
-
-Fraud detection models are only as useful as the pipeline that keeps them accurate, current, and safely deployed. This project focuses on the operational side of model delivery rather than only the modeling step:
+The case study focuses on the engineering around a fraud-classification model: reproducible runs, an explicit validation gate, controlled endpoint rollout, and traceable artifacts and metrics.
 
 - **Reproducibility.** Every run is isolated with a unique execution id; scripts, processed data, artifacts, and metrics are persisted to S3.
 - **Quality control.** A conditional step rejects models that fall below a minimum validation ROC-AUC before they can be deployed.
@@ -106,7 +104,7 @@ imgs/             Diagrams referenced by the documentation
 
 ## Getting started
 
-The [architectural document](ARCHITECTURAL_PRESENTATION.md) covers prerequisites, the CloudFormation installation, and debugging in its implementation plan. In short: copy `.env.example` to `.env`, fill in the required values, install the stacks with `cloudformation/install.sh`, then merge to the repository to trigger the integration pipeline end to end.
+The [architectural document](ARCHITECTURAL_PRESENTATION.md) covers prerequisites, CloudFormation installation, and debugging. The steps describe a reference AWS deployment; service availability, quotas, and SDK/container compatibility vary by account and region and evolve over time. Verify current AWS prerequisites and adjust versions or configuration as needed. In short: copy `.env.example` to `.env`, fill in the required values, install the stacks with `cloudformation/install.sh`, then merge to the tracked branch to trigger the integration pipeline.
 
 > [!WARNING]
 > The deployment provisions paid resources (for example, a minimum of two
